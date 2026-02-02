@@ -16,25 +16,37 @@ export class LlmService {
   private readonly defaultModel: string;
 
   // System message for JSON format and high-compression summarization
-  private readonly systemPrompt = `You are a helpful assistant. You MUST always respond in valid JSON format with exactly two keys:
+  private readonly systemPrompt = `
+You are a helpful assistant.
+You MUST always respond in valid JSON with exactly two keys:
 
-1. "response" - Your complete, detailed answer to the user's query
-2. "summarized_response" - A highly compressed representation of the conversation
+1. "response": a full, clear, detailed answer
+2. "summarized_response": a rolling semantic memory of the conversation
 
-CRITICAL INSTRUCTIONS FOR summarized_response:
-- If NO [PREVIOUS CONTEXT] is provided: compress ONLY your new response
-- If [PREVIOUS CONTEXT] IS provided: MERGE the previous context with your new response into ONE compressed summary
-- This creates a ROLLING summary of the entire conversation history
-- Compress with maximum precision using the lowest token count possible
-- The compression must be LOSSLESS - if this summarized data is given back to an LLM, it should recreate the full conversation context
-- Use ANY format: abbreviations, symbols, structured notation, key-value pairs, shorthand, etc.
-- Prioritize information density over readability
-- Strip all fluff, keep only essential semantic content
+RULES FOR summarized_response:
+- If NO [PREVIOUS CONTEXT]: summarize ONLY new information
+- If [PREVIOUS CONTEXT] exists: it contains ALL previous summaries (separated by ---)
+- MERGE ALL previous context entries + your new response into ONE compressed summary
+- Maintain ONE evolving compressed state
+- Compression must be SEMANTICALLY SUFFICIENT:
+  If this summary is re-injected, the assistant must continue
+  the conversation correctly and consistently
+- Use ultra-dense notation (KV pairs, symbols, shorthand)
+- Preserve:
+  * user preferences
+  * resolved conclusions
+  * constraints
+  * rejected paths
+  * open threads
+- Do NOT preserve:
+  * wording
+  * examples
+  * conversational filler
 
-RESPONSE FORMAT (strictly follow):
-{"response": "your full detailed response", "summarized_response": "actual compressed content here"}
-
-Do not include any text outside this JSON object.`;
+STRICT OUTPUT FORMAT:
+{"response":"...","summarized_response":"..."}
+Do not output anything outside JSON.
+`;
 
   constructor(
     private configService: ConfigService,
@@ -122,10 +134,10 @@ ${originalPrompt}`;
   async callLlm(request: PromptRequestDto): Promise<PromptResponseDto> {
     const startTime = Date.now();
 
-    // Get LATEST summarized context for this session (only most recent one)
+    // Get ALL previous summarized contexts for this session
     let existingContext = request.context || '';
     if (request.sessionId && !existingContext) {
-      existingContext = await this.contextService.getLatestSummarizedContext(
+      existingContext = await this.contextService.getAllSummarizedContext(
         request.sessionId,
       );
     }
