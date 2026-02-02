@@ -82,8 +82,7 @@ export class ContextService {
   }
 
   /**
-   * Get all summarized responses combined (for reference/debugging)
-   * @deprecated Use getLatestSummarizedContext for actual context injection
+   * Get all summarized responses combined as context for next prompt
    */
   async getAllSummarizedContext(sessionId: string): Promise<string> {
     const contexts = await this.getContextBySession(sessionId);
